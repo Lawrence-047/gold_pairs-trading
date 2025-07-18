@@ -1,3 +1,4 @@
+#库函数
 import pandas as pd
 import statsmodels.api as sm
 from statsmodels.tsa.stattools import adfuller
@@ -8,7 +9,8 @@ plt.rcParams['axes.unicode_minus'] = False
 
 def combine_md_datetime(df, date_col='MDDate', time_col='MDTime', new_col='DateTime', drop_original=True):
     """
-    标准化时间
+    时间标准化，因为输入的时间是两列，
+    通用型的时候可以增加datetime鉴别
     """
     df[date_col] = df[date_col].astype(str)
     df[time_col] = df[time_col].astype(str).str.zfill(9)
@@ -20,7 +22,7 @@ def combine_md_datetime(df, date_col='MDDate', time_col='MDTime', new_col='DateT
 
 def load_and_prepare(filepath, prefix):
     """
-    加载并清洗数据，加前缀，返回清洗后的 df 和主价格列名
+    加载数据，清洗数据，加前缀
     """
     df = pd.read_csv(filepath, usecols=['MDDate', 'MDTime', 'LastPx', 'Buy1Price', 'Sell1Price'])
     df = df[df['LastPx'] != 0]
@@ -37,7 +39,7 @@ def load_and_prepare(filepath, prefix):
 
 def merge_and_aggregate(df1, df2, group_size=30):
     """
-    合并并聚合，自动识别两个主价格列并重命名为 ETF_Price、AU_Price
+    合并聚合生成merged
     """
     merged = pd.merge_asof(df1,df2,on='DateTime', direction='backward')
     
@@ -47,7 +49,7 @@ def merge_and_aggregate(df1, df2, group_size=30):
     
     return merged_agg
 
-# Kalman Filter 参数（可调）
+#Kalman参数
 OBS_VAR = 0.01
 STATE_VAR = 0.0001
 INIT_MEAN = 1.0
@@ -55,23 +57,21 @@ INIT_VAR = 1.0
 
 def kalman_and_cointegration(df, win=60):
     """
-    自动识别价格列，执行 Kalman 滤波 + 协整检验 + 图示。
-    参数：
-        df：包含 DateTime 和两个价格列的数据
-        win：rolling z-score 的窗口
-    返回：
-        df_out：包含动态beta、spread、zscore 的DataFrame
-        test_result：协整检验结果字典
+    Kalman滤波，协整检验
+    这个window可以调整，因为最后准备做一个通用型的，
+    所以考虑之后加一个鉴别数据频率的函数，根据函数生成所需要的窗口大小
     """
-
-    # === 自动识别两个价格列 ===
+    #识别价格列
     price_cols = [col for col in df.columns if col != 'DateTime' and pd.api.types.is_numeric_dtype(df[col])]
     if len(price_cols) < 2:
         raise ValueError("找不到两个价格列，至少需要两列数值型价格")
 
     col_y, col_x = price_cols[:2]
 
-    # === Kalman估计动态β ===
+    #Kalman估计beta（for循环）
+    """
+    感觉这便是可以优化的，不然迭代速率有点低
+    """
     state_mean = INIT_MEAN
     state_var = INIT_VAR
     betas, spreads = [], []
@@ -98,7 +98,11 @@ def kalman_and_cointegration(df, win=60):
     df['spread_std'] = pd.Series(spreads).rolling(win).std()
     df['zscore'] = (df['spread'] - df['spread_mean']) / df['spread_std']
 
-    # === 静态协整检验（Engle-Granger）===
+    #静态协整检验
+    """
+    其实理论上应该是先协整检验，然后动态估计beta，不然会造成计算冗余
+    但准备等参数调好再进行
+    """
     X = sm.add_constant(df[col_x])
     model = sm.OLS(df[col_y], X).fit()
     beta_static = model.params[1]
@@ -115,7 +119,7 @@ def kalman_and_cointegration(df, win=60):
         '是否协整(5%)': p_value < 0.05
     }
 
-    # === 图像展示 ===
+    #画图看看
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
 
     axes[0].plot(df['DateTime'], df['beta_kalman'], label='Kalman Beta')
@@ -138,7 +142,7 @@ def kalman_and_cointegration(df, win=60):
     plt.tight_layout()
     plt.show()
 
-    # === 静态 vs 动态 β 对比图 ===
+    #对比一下静态和动态beta
     plt.figure(figsize=(14, 4))
     plt.plot(df['DateTime'], df['beta_kalman'], label='动态 β (Kalman)', color='blue')
     plt.axhline(beta_static, linestyle='--', color='red', label=f'静态 β (OLS): {beta_static:.4f}')
