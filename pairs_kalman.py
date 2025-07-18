@@ -9,7 +9,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 def combine_md_datetime(df, date_col='MDDate', time_col='MDTime', new_col='DateTime', drop_original=True):
     """
-    时间标准化，因为输入的时间是两列，
+    时间标准化，因为这边用的数据输入的时间是两列，
     通用型的时候可以增加datetime鉴别
     """
     df[date_col] = df[date_col].astype(str)
@@ -70,7 +70,7 @@ def kalman_and_cointegration(df, win=60):
 
     #Kalman估计beta（for循环）
     """
-    感觉这便是可以优化的，不然迭代速率有点低
+    感觉这边是可以优化的，不然迭代速率有点低
     """
     state_mean = INIT_MEAN
     state_var = INIT_VAR
@@ -142,7 +142,7 @@ def kalman_and_cointegration(df, win=60):
     plt.tight_layout()
     plt.show()
 
-    #对比一下静态和动态beta
+    #对比一下静态和动态beta，但这个好像没啥价值，我自己的代码里面已经改成了预估的beta和实际beta的对比图。
     plt.figure(figsize=(14, 4))
     plt.plot(df['DateTime'], df['beta_kalman'], label='动态 β (Kalman)', color='blue')
     plt.axhline(beta_static, linestyle='--', color='red', label=f'静态 β (OLS): {beta_static:.4f}')
